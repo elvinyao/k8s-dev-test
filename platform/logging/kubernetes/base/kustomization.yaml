@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: logging
+resources:
+  - namespace.yaml
+  - certificates.yaml
+  - filebeat-rbac.yaml
+  - elasticsearch.yaml
+  - kibana.yaml
+  - logstash.yaml
+  - filebeat.yaml
+  - disruption-budgets.yaml
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: platform-logging
+    includeSelectors: false
+    includeTemplates: false

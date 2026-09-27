@@ -1,0 +1,33 @@
+grafana:
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  persistence:
+    enabled: true
+    storageClassName: local-retain
+    size: 2Gi
+  deploymentStrategy: {type: Recreate}
+prometheus:
+  prometheusSpec:
+    replicas: 1
+    retention: 2d
+    retentionSize: 4GB
+    resources:
+      requests: {cpu: 100m, memory: 512Mi}
+      limits: {cpu: "2", memory: 2Gi}
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-retain
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests: {storage: 5Gi}
+alertmanager:
+  alertmanagerSpec:
+    replicas: 1
+    configSecret: alertmanager-config
+kubeEtcd: {enabled: false}
+kubeControllerManager: {enabled: false}
+kubeScheduler: {enabled: false}
+kubeProxy: {enabled: false}

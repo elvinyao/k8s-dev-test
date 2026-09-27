@@ -1,0 +1,24 @@
+cluster.name: platform-logging
+node.name: elasticsearch
+network.host: 0.0.0.0
+network.publish_host: elasticsearch
+discovery.type: single-node
+bootstrap.memory_lock: true
+path.repo: [/mnt/snapshots]
+xpack.security.enabled: true
+xpack.security.enrollment.enabled: false
+xpack.license.self_generated.type: basic
+xpack.security.http.ssl:
+  enabled: true
+  key: tls/server.key
+  certificate: tls/server.crt
+  certificate_authorities: [tls/ca.crt]
+  client_authentication: none
+xpack.security.transport.ssl:
+  enabled: true
+  key: tls/server.key
+  certificate: tls/server.crt
+  certificate_authorities: [tls/ca.crt]
+  verification_mode: full
+  client_authentication: required
+

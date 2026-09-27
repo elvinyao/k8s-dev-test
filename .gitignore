@@ -1,0 +1,29 @@
+# Local credentials and state
+.env
+.env.*
+!.env.example
+.kube/
+kubeconfig
+kubeconfig.*
+*.kubeconfig
+*.key
+*.pem
+*.p12
+*.pfx
+secrets.local/
+.local/
+.state/
+data/
+backups/
+
+# Generated artifacts and caches
+.cache/
+.venv/
+__pycache__/
+*.py[cod]
+*.log
+rendered/
+*.tgz
+.DS_Store
+.idea/
+.vscode/

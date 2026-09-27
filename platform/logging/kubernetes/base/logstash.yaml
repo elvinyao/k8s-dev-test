@@ -1,0 +1,115 @@
+apiVersion: logstash.k8s.elastic.co/v1alpha1
+kind: Logstash
+metadata:
+  name: logging-logstash
+  labels:
+    app.kubernetes.io/component: collection
+spec:
+  version: 9.5.4
+  count: 2
+  elasticsearchRefs:
+    - name: logging-es
+      clusterName: logs
+  config:
+    log.level: info
+    pipeline.ecs_compatibility: v8
+    pipeline.workers: 2
+    pipeline.batch.size: 125
+    queue.type: persisted
+    queue.max_bytes: 8gb
+    path.queue: /usr/share/logstash/data/queue
+    queue.checkpoint.writes: 1
+    dead_letter_queue.enable: true
+    dead_letter_queue.max_bytes: 1gb
+    path.dead_letter_queue: /usr/share/logstash/data/dead_letter_queue
+  pipelines:
+    - pipeline.id: kubernetes
+      config.string: |
+        input {
+          beats {
+            port => 5044
+            ecs_compatibility => "v8"
+            ssl_enabled => true
+            ssl_certificate => "/usr/share/logstash/config/beats-tls/tls.crt"
+            ssl_key => "/usr/share/logstash/config/beats-tls/tls.key"
+            ssl_certificate_authorities => ["/usr/share/logstash/config/beats-tls/ca.crt"]
+            ssl_client_authentication => "required"
+            ssl_supported_protocols => ["TLSv1.2", "TLSv1.3"]
+          }
+        }
+        output {
+          elasticsearch {
+            hosts => ["${LOGS_ES_HOSTS}"]
+            user => "${LOGS_ES_USER}"
+            password => "${LOGS_ES_PASSWORD}"
+            ssl_enabled => true
+            ssl_certificate_authorities => "${LOGS_ES_SSL_CERTIFICATE_AUTHORITY}"
+            ssl_verification_mode => "full"
+            ecs_compatibility => "v8"
+            data_stream => "true"
+            data_stream_auto_routing => false
+            data_stream_type => "logs"
+            data_stream_dataset => "kubernetes"
+            data_stream_namespace => "platform"
+            manage_template => false
+          }
+        }
+  services:
+    - name: beats
+      service:
+        spec:
+          type: ClusterIP
+          ports:
+            - name: beats-tls
+              port: 5044
+              targetPort: 5044
+              protocol: TCP
+  podTemplate:
+    metadata:
+      labels:
+        app.kubernetes.io/component: logstash
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 120
+      securityContext:
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  logstash.k8s.elastic.co/name: logging-logstash
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: logstash
+          env:
+            - name: LS_JAVA_OPTS
+              value: -Xms1g -Xmx1g -XX:MaxDirectMemorySize=1g
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+            - name: logstash-data
+              mountPath: /usr/share/logstash/data
+            - name: beats-tls
+              mountPath: /usr/share/logstash/config/beats-tls
+              readOnly: true
+      volumes:
+        - name: beats-tls
+          secret:
+            secretName: logging-logstash-beats-tls
+            defaultMode: 0440
+  volumeClaimTemplates:
+    - metadata:
+        name: logstash-data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: production-rwo
+        resources:
+          requests:
+            storage: 20Gi

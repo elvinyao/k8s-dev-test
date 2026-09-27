@@ -1,0 +1,16 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: storage-demo
+  namespace: argocd
+spec:
+  project: platform-apps
+  source:
+    repoURL: https://git.example.invalid/platform/k8s-dev-test.git
+    targetRevision: main
+    path: apps/storage-demo
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: apps-dev
+  # The platform owns namespace creation and storage provisioning.
+  syncPolicy: {}

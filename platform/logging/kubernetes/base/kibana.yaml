@@ -1,0 +1,36 @@
+apiVersion: kibana.k8s.elastic.co/v1
+kind: Kibana
+metadata:
+  name: logging-kibana
+  labels:
+    app.kubernetes.io/component: foundation
+spec:
+  version: 9.5.4
+  count: 2
+  elasticsearchRef:
+    name: logging-es
+  secureSettings:
+    - secretName: logging-kibana-secure-settings
+  podTemplate:
+    metadata:
+      labels:
+        app.kubernetes.io/component: kibana
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  kibana.k8s.elastic.co/name: logging-kibana
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: kibana
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi

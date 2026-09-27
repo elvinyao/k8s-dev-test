@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform-sys
+  namespace: argocd
+spec:
+  description: Administrator-owned namespace bootstrap for the local platform
+  sourceRepos:
+    - https://git.example.invalid/platform/k8s-dev-test.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: '*'
+  # Initial scope is Namespace management only; extend per component after review.
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+  namespaceResourceBlacklist:
+    - group: '*'
+      kind: '*'

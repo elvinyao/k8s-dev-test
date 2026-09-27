@@ -1,0 +1,17 @@
+# Install this on an actual log source, not as a central server reading remote disks.
+filebeat.inputs:
+  - type: filestream
+    id: platform-application
+    enabled: true
+    paths: [/var/log/platform/*.log]
+output.logstash:
+  hosts: ["logs.example.invalid:5044"]
+  ssl.certificate_authorities: [/etc/filebeat/tls/ca.crt]
+  ssl.certificate: /etc/filebeat/tls/client.crt
+  ssl.key: /etc/filebeat/tls/client.key
+  ssl.verification_mode: full
+queue.disk:
+  max_size: 2GB
+logging.to_files: false
+logging.to_stderr: true
+

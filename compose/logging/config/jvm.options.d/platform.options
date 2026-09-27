@@ -1,0 +1,4 @@
+# Keep heap <= 50% of the Elasticsearch container memory limit.
+-Xms2g
+-Xmx2g
+-Des.enforce.bootstrap.checks=true

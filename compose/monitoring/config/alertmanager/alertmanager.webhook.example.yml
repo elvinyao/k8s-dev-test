@@ -1,0 +1,29 @@
+# Replace alertmanager.yml with a reviewed copy of this file to enable delivery.
+# The URL file must contain the full HTTPS endpoint for a receiver supporting
+# Alertmanager's generic webhook JSON payload. Do not commit that file.
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: operations-webhook
+  group_by: [alertname, job]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: operations-webhook
+    webhook_configs:
+      - url_file: /etc/alertmanager/secrets/webhook-url
+        send_resolved: true
+        max_alerts: 50
+        timeout: 10s
+        http_config:
+          follow_redirects: false
+          tls_config:
+            min_version: TLS12
+
+inhibit_rules:
+  - source_matchers: ['severity="critical"']
+    target_matchers: ['severity="warning"']
+    equal: [alertname, job, instance]

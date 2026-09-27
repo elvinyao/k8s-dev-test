@@ -1,0 +1,19 @@
+# LOCAL DEFAULT: alerts are visible in the UI but no external notification is sent.
+# For production, configure a real receiver and test firing AND resolved delivery.
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: local-ui-only
+  group_by: [alertname, job]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: local-ui-only
+
+inhibit_rules:
+  - source_matchers: ['severity="critical"']
+    target_matchers: ['severity="warning"']
+    equal: [alertname, job, instance]

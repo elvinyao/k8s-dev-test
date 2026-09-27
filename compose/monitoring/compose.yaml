@@ -1,0 +1,179 @@
+name: ${MONITORING_PROJECT_NAME:-platform-monitoring}
+
+x-runtime: &runtime
+  restart: unless-stopped
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  pids_limit: 256
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "5"
+
+services:
+  prometheus:
+    <<: *runtime
+    networks: [monitoring]
+    image: ${PROMETHEUS_IMAGE:-prom/prometheus:v3.13.3}
+    cpus: ${PROMETHEUS_CPUS:-2.0}
+    mem_limit: ${PROMETHEUS_MEMORY:-2g}
+    stop_grace_period: 2m
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-15d}
+      - --storage.tsdb.retention.size=${PROMETHEUS_RETENTION_SIZE:-10GB}
+      - --web.external-url=${PROMETHEUS_EXTERNAL_URL:-http://localhost:9090/}
+      - --web.route-prefix=/
+    ports:
+      - 127.0.0.1:${PROMETHEUS_PORT:-9090}:9090
+    volumes:
+      - type: bind
+        source: ${MONITORING_CONFIG_DIR:?Set the absolute Docker daemon host config path}/prometheus
+        target: /etc/prometheus
+        read_only: true
+        bind:
+          create_host_path: false
+      - prometheus_data:/prometheus
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:9090/-/ready]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+
+  alertmanager:
+    <<: *runtime
+    networks: [monitoring]
+    image: ${ALERTMANAGER_IMAGE:-prom/alertmanager:v0.34.1}
+    cpus: ${ALERTMANAGER_CPUS:-0.5}
+    mem_limit: ${ALERTMANAGER_MEMORY:-256m}
+    stop_grace_period: 30s
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+      - --data.retention=120h
+      - --cluster.listen-address=
+      - --web.external-url=${ALERTMANAGER_EXTERNAL_URL:-http://localhost:9093/}
+      - --web.route-prefix=/
+    ports:
+      - 127.0.0.1:${ALERTMANAGER_PORT:-9093}:9093
+    volumes:
+      - type: bind
+        source: ${MONITORING_CONFIG_DIR:?Set the absolute Docker daemon host config path}/alertmanager
+        target: /etc/alertmanager
+        read_only: true
+        bind:
+          create_host_path: false
+      - alertmanager_data:/alertmanager
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:9093/-/ready]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  grafana:
+    <<: *runtime
+    networks: [monitoring]
+    image: ${GRAFANA_IMAGE:-grafana/grafana:13.2.2}
+    cpus: ${GRAFANA_CPUS:-1.0}
+    mem_limit: ${GRAFANA_MEMORY:-1g}
+    stop_grace_period: 30s
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+      GF_SECURITY_SECRET_KEY__FILE: /run/secrets/grafana_secret_key
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000/}
+      # Internal Prometheus scrapes use grafana:3000; the TLS proxy validates
+      # public Host headers without redirecting this internal metrics request.
+      GF_SERVER_ENFORCE_DOMAIN: "false"
+      GF_SERVER_DOMAIN: ${GRAFANA_DOMAIN:-localhost}
+      GF_SECURITY_COOKIE_SECURE: ${GRAFANA_COOKIE_SECURE:-false}
+      GF_SECURITY_COOKIE_SAMESITE: lax
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_ALLOW_ORG_CREATE: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_METRICS_ENABLED: "true"
+      GF_LOG_MODE: console
+      GF_LOG_LEVEL: info
+    ports:
+      - 127.0.0.1:${GRAFANA_PORT:-3000}:3000
+    secrets:
+      - grafana_admin_password
+      - grafana_secret_key
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - type: bind
+        source: ${MONITORING_CONFIG_DIR:?Set the absolute Docker daemon host config path}/grafana/provisioning
+        target: /etc/grafana/provisioning
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MONITORING_CONFIG_DIR:?Set the absolute Docker daemon host config path}/grafana/dashboards
+        target: /var/lib/grafana/dashboards
+        read_only: true
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:3000/api/health]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+
+  # Explicit maintenance profile; never starts with the normal stack.
+  # Stop all writers first. See README for backup and empty-volume restore.
+  volume-tools:
+    <<: *runtime
+    profiles: [tools]
+    image: ${PROMETHEUS_IMAGE:-prom/prometheus:v3.13.3}
+    restart: "no"
+    user: "0:0"
+    cpus: "0.5"
+    mem_limit: 256m
+    pids_limit: 64
+    network_mode: none
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    entrypoint: [/bin/sh]
+    command: [-c, 'printf "Use the documented backup or restore command.\n"']
+    volumes:
+      - prometheus_data:/volumes/prometheus
+      - alertmanager_data:/volumes/alertmanager
+      - grafana_data:/volumes/grafana
+      - type: bind
+        source: ${MONITORING_CONFIG_DIR:?Set the absolute Docker daemon host config path}/../backups
+        target: /backups
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+
+networks:
+  monitoring:
+    driver: bridge
+
+volumes:
+  prometheus_data:
+  alertmanager_data:
+  grafana_data:
+
+secrets:
+  grafana_admin_password:
+    file: ${MONITORING_CONFIG_DIR:?Set the absolute Docker daemon host config path}/secrets/grafana-admin-password
+  grafana_secret_key:
+    file: ${MONITORING_CONFIG_DIR:?Set the absolute Docker daemon host config path}/secrets/grafana-secret-key

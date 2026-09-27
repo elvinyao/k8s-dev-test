@@ -1,0 +1,67 @@
+{
+  "uid": "compose-monitoring-summary",
+  "title": "Platform monitoring overview",
+  "tags": ["platform", "compose"],
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-1h", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "title": "Healthy scrape targets",
+      "type": "stat",
+      "gridPos": {"x": 0, "y": 0, "w": 8, "h": 5},
+      "datasource": {"type": "prometheus", "uid": "platform-prometheus"},
+      "targets": [{"refId": "A", "expr": "sum(up)", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 2,
+      "title": "Failed scrape targets",
+      "type": "stat",
+      "gridPos": {"x": 8, "y": 0, "w": 8, "h": 5},
+      "datasource": {"type": "prometheus", "uid": "platform-prometheus"},
+      "targets": [{"refId": "A", "expr": "count(up == 0) or vector(0)", "instant": true}],
+      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 3,
+      "title": "Active time series",
+      "type": "stat",
+      "gridPos": {"x": 16, "y": 0, "w": 8, "h": 5},
+      "datasource": {"type": "prometheus", "uid": "platform-prometheus"},
+      "targets": [{"refId": "A", "expr": "prometheus_tsdb_head_series", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 4,
+      "title": "Target availability",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 5, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "platform-prometheus"},
+      "targets": [{"refId": "A", "expr": "up", "legendFormat": "{{job}} / {{instance}}"}],
+      "fieldConfig": {"defaults": {"min": 0, "max": 1}, "overrides": []}
+    },
+    {
+      "id": 5,
+      "title": "Process resident memory (not host memory)",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 5, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "platform-prometheus"},
+      "targets": [{"refId": "A", "expr": "process_resident_memory_bytes", "legendFormat": "{{job}} / {{instance}}"}],
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []}
+    },
+    {
+      "id": 6,
+      "title": "Scrape duration",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 13, "w": 24, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "platform-prometheus"},
+      "targets": [{"refId": "A", "expr": "scrape_duration_seconds", "legendFormat": "{{job}} / {{instance}}"}],
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []}
+    }
+  ]
+}

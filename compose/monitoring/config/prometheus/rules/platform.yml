@@ -1,0 +1,50 @@
+groups:
+  - name: monitoring-platform
+    rules:
+      - alert: Watchdog
+        expr: vector(1)
+        labels:
+          severity: none
+        annotations:
+          summary: Monitoring pipeline heartbeat
+          description: This alert always fires. Connect a receiver and an independent dead-man check before relying on notifications.
+      - alert: MonitoringTargetDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Target {{ $labels.instance }} is unreachable'
+          description: 'Prometheus has failed to scrape job {{ $labels.job }} for two minutes.'
+      - alert: PrometheusConfigReloadFailed
+        expr: prometheus_config_last_reload_successful == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Prometheus rejected its configuration
+          description: Check configuration and rule validation before retrying the reload.
+      - alert: PrometheusRuleEvaluationFailures
+        expr: increase(prometheus_rule_evaluation_failures_total[10m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Prometheus rule evaluations failed
+          description: Check the rules page and server logs for the failing expression.
+      - alert: PrometheusAlertmanagerMissing
+        expr: prometheus_notifications_alertmanagers_discovered < 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Prometheus has no discovered Alertmanager
+          description: Verify the Alertmanager service and alerting configuration.
+      - alert: AlertmanagerDeliveryFailures
+        expr: increase(alertmanager_notifications_failed_total[10m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Alertmanager notification delivery failed
+          description: Check receiver credentials, TLS, reachability and rate limits.

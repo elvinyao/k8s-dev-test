@@ -1,0 +1,23 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: logging-kibana
+  labels:
+    app.kubernetes.io/component: foundation
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      kibana.k8s.elastic.co/name: logging-kibana
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: logging-logstash
+  labels:
+    app.kubernetes.io/component: foundation
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      logstash.k8s.elastic.co/name: logging-logstash

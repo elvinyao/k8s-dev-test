@@ -1,0 +1,199 @@
+# GitLab Helm chart 10.4.1 / application 19.4.1; external durable backends.
+global:
+  edition: ee
+  hosts:
+    domain: example.invalid
+    https: true
+    gitlab:
+      name: gitlab.example.invalid
+    ssh: gitlab.example.invalid
+  gatewayApi:
+    enabled: true
+    installEnvoy: false
+    configureEnvoy: false
+    configureCertmanager: false
+    gatewayRef:
+      name: platform
+      namespace: gateway-system
+  ingress:
+    enabled: false
+    configureCertmanager: false
+  initialRootPassword:
+    secret: gitlab-initial-root-password
+    key: password
+  psql:
+    host: postgres.example.invalid
+    port: 5432
+    username: gitlab
+    database: gitlabhq_production
+    password:
+      secret: gitlab-postgresql
+      key: password
+    # This chart renders verify-ca for this mutually authenticated TLS setup.
+    ssl:
+      secret: gitlab-postgresql-tls
+      serverCA: ca.crt
+      clientCertificate: tls.crt
+      clientKey: tls.key
+  redis:
+    host: redis.example.invalid
+    port: 6379
+    scheme: rediss
+    auth:
+      enabled: true
+      secret: gitlab-redis
+      key: password
+    redisTLS:
+      caFile:
+        secret: gitlab-backend-ca
+        key: backend-ca.crt
+  gitaly:
+    enabled: false
+    external:
+      - name: default
+        hostname: gitaly.example.invalid
+        port: 8076
+        tlsEnabled: true
+    tls:
+      enabled: true
+    authToken:
+      secret: gitlab-gitaly-token
+      key: token
+  shell:
+    port: 2222
+    authToken:
+      secret: gitlab-shell-token
+      key: secret
+  certificates:
+    customCAs:
+      - secret: gitlab-backend-ca
+  appConfig:
+    initialDefaults:
+      signupEnabled: false
+    object_store:
+      enabled: true
+      proxy_download: true
+      connection:
+        secret: gitlab-object-storage
+        key: connection
+    lfs:
+      bucket: platform-gitlab-lfs
+    artifacts:
+      bucket: platform-gitlab-artifacts
+    uploads:
+      bucket: platform-gitlab-uploads
+    packages:
+      bucket: platform-gitlab-packages
+    terraformState:
+      enabled: true
+      bucket: platform-gitlab-terraform-state
+    ciSecureFiles:
+      enabled: true
+      bucket: platform-gitlab-ci-secure-files
+    backups:
+      bucket: platform-gitlab-backups
+      tmpBucket: platform-gitlab-backup-tmp
+  smtp:
+    enabled: true
+    address: smtp.example.invalid
+    port: 587
+    user_name: gitlab
+    password:
+      secret: gitlab-smtp
+      key: password
+    authentication: login
+    starttls_auto: true
+    openssl_verify_mode: peer
+  email:
+    from: gitlab@example.invalid
+    reply_to: support@example.invalid
+  antiAffinity: hard
+  kas:
+    enabled: false
+
+installCertmanager: false
+nginx-ingress:
+  enabled: false
+traefik:
+  install: false
+haproxy:
+  install: false
+prometheus:
+  install: false
+gitlab-runner:
+  install: false
+registry:
+  enabled: false
+
+gitlab:
+  webservice:
+    gatewayRoute:
+      sectionName: https
+    minReplicas: 2
+    maxReplicas: 4
+    resources:
+      requests:
+        cpu: '1'
+        memory: 3Gi
+      limits:
+        memory: 5Gi
+    workhorse:
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          memory: 512Mi
+  sidekiq:
+    minReplicas: 2
+    maxReplicas: 4
+    resources:
+      requests:
+        cpu: '1'
+        memory: 2Gi
+      limits:
+        memory: 4Gi
+  gitlab-shell:
+    minReplicas: 2
+    maxReplicas: 4
+    # HTTPS clone works first; publish SSH separately after reviewing the LB.
+    gatewayRoute:
+      enabled: false
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        memory: 512Mi
+  toolbox:
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        memory: 2Gi
+    persistence:
+      enabled: true
+      storageClass: production-rwo
+      size: 100Gi
+    backups:
+      objectStorage:
+        backend: s3
+        config:
+          secret: gitlab-backup-storage
+          key: config
+      cron:
+        enabled: true
+        schedule: '0 2 * * *'
+        concurrencyPolicy: Forbid
+        persistence:
+          enabled: true
+          useGenericEphemeralVolume: true
+          storageClass: production-rwo
+          size: 100Gi
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            memory: 2Gi

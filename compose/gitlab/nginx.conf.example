@@ -1,0 +1,37 @@
+# Load inside the http {} context of an existing, managed NGINX proxy.
+# This example assumes NGINX runs on the same host as the published GitLab port.
+map $http_upgrade $gitlab_connection_upgrade {
+    default upgrade;
+    '' close;
+}
+
+server {
+    listen 80;
+    server_name gitlab.example.invalid;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name gitlab.example.invalid;
+    ssl_certificate /etc/nginx/tls/gitlab/fullchain.pem;
+    ssl_certificate_key /etc/nginx/tls/gitlab/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    client_max_body_size 1g;
+
+    location / {
+        proxy_pass http://127.0.0.1:8929;
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        # Edge proxy overwrites untrusted client forwarding headers.
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Ssl on;
+        proxy_set_header X-Forwarded-Port 443;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $gitlab_connection_upgrade;
+        proxy_read_timeout 900s;
+        proxy_request_buffering off;
+    }
+}

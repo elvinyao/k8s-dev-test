@@ -1,0 +1,37 @@
+# Requires this path to exist inside the labelled kind worker.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: local-static-demo
+spec:
+  capacity:
+    storage: 1Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  local:
+    path: /var/local/platform/static-demo
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: platform.local/storage-demo
+              operator: In
+              values:
+                - "true"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: local-static-demo
+  namespace: storage-demo
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ""
+  volumeName: local-static-demo
+  resources:
+    requests:
+      storage: 1Gi

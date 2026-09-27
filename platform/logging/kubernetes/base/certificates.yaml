@@ -1,0 +1,90 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: logging-bootstrap-selfsigned
+  labels:
+    app.kubernetes.io/component: foundation
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: logging-beats-ca
+  labels:
+    app.kubernetes.io/component: foundation
+spec:
+  isCA: true
+  commonName: platform-logging-beats-ca
+  secretName: logging-beats-ca
+  duration: 87600h
+  renewBefore: 8760h
+  privateKey:
+    algorithm: RSA
+    size: 3072
+    encoding: PKCS8
+    # Root-key rotation requires an explicit overlapping-trust migration.
+    rotationPolicy: Never
+  usages: [cert sign, crl sign]
+  issuerRef:
+    name: logging-bootstrap-selfsigned
+    kind: Issuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: logging-beats-ca
+  labels:
+    app.kubernetes.io/component: foundation
+spec:
+  ca:
+    secretName: logging-beats-ca
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: logging-logstash-beats
+  labels:
+    app.kubernetes.io/component: foundation
+spec:
+  secretName: logging-logstash-beats-tls
+  duration: 2160h
+  renewBefore: 720h
+  dnsNames:
+    - logging-logstash-ls-beats
+    - logging-logstash-ls-beats.logging
+    - logging-logstash-ls-beats.logging.svc
+    - logging-logstash-ls-beats.logging.svc.cluster.local
+  privateKey:
+    algorithm: RSA
+    size: 2048
+    encoding: PKCS8
+    rotationPolicy: Always
+  usages: [digital signature, key encipherment, server auth]
+  issuerRef:
+    name: logging-beats-ca
+    kind: Issuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: logging-filebeat-client
+  labels:
+    app.kubernetes.io/component: foundation
+spec:
+  commonName: logging-filebeat
+  secretName: logging-filebeat-client-tls
+  duration: 2160h
+  renewBefore: 720h
+  privateKey:
+    algorithm: RSA
+    size: 2048
+    encoding: PKCS8
+    rotationPolicy: Always
+  usages: [digital signature, key encipherment, client auth]
+  issuerRef:
+    name: logging-beats-ca
+    kind: Issuer
+    group: cert-manager.io

@@ -1,0 +1,8 @@
+.env
+.env.*
+!.env.example
+secrets/*
+!secrets/README.md
+!secrets/*.example
+runner/config.toml
+runner/kubernetes/

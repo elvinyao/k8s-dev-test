@@ -1,0 +1,7 @@
+.env
+.env.*
+!.env.example
+backups/
+config/secrets/
+config/alertmanager/secrets/
+__pycache__/

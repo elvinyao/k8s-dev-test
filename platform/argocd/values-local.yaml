@@ -1,0 +1,23 @@
+global:
+  domain: localhost
+configs:
+  params:
+    server.insecure: false
+  cm:
+    admin.enabled: true
+    users.anonymous.enabled: false
+dex:
+  enabled: false
+controller:
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: "1", memory: 1Gi}
+repoServer:
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: "1", memory: 512Mi}
+server:
+  service: {type: ClusterIP}
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: "1", memory: 512Mi}

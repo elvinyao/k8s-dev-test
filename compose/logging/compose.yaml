@@ -1,0 +1,239 @@
+name: ${COMPOSE_PROJECT_NAME:-platform-logging}
+
+x-common: &common
+  restart: unless-stopped
+  init: true
+  networks: [logging]
+  security_opt: [no-new-privileges:true]
+  logging: &bounded-logging
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  elasticsearch:
+    <<: *common
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.5.4
+    user: "1000:0"
+    environment:
+      ELASTIC_PASSWORD_FILE: /run/secrets/elastic_password
+    mem_limit: ${ES_MEMORY_LIMIT:-4g}
+    cpus: ${ES_CPU_LIMIT:-2.0}
+    ulimits:
+      memlock: {soft: -1, hard: -1}
+      nofile: {soft: 65536, hard: 65536}
+    secrets: [elastic_password]
+    volumes:
+      - type: bind
+        source: ${LOGGING_CONFIG_DIR:?Set LOGGING_CONFIG_DIR}/elasticsearch.yml
+        target: /usr/share/elasticsearch/config/elasticsearch.yml
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOGGING_CONFIG_DIR:?Set LOGGING_CONFIG_DIR}/jvm.options.d/platform.options
+        target: /usr/share/elasticsearch/config/jvm.options.d/platform.options
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOGGING_TLS_DIR:?Set LOGGING_TLS_DIR}/elasticsearch
+        target: /usr/share/elasticsearch/config/tls
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOGGING_SNAPSHOT_DIR:?Set LOGGING_SNAPSHOT_DIR}
+        target: /mnt/snapshots
+        bind: {create_host_path: false}
+      - es-data:/usr/share/elasticsearch/data
+    ports:
+      - ${ELASTICSEARCH_BIND_ADDRESS:-127.0.0.1}:${ELASTICSEARCH_PORT:-9200}:9200
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test "$$(curl --silent --cacert config/tls/ca.crt --output /dev/null --write-out '%{http_code}' https://localhost:9200)" = 401
+      interval: 15s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+
+  bootstrap:
+    image: python:3.13-bookworm
+    profiles: [init]
+    user: "1000:0"
+    init: true
+    restart: "no"
+    networks: [logging]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    mem_limit: 256m
+    cpus: 0.5
+    logging: *bounded-logging
+    entrypoint: [python, /opt/logging/admin.py]
+    command: [bootstrap]
+    depends_on:
+      elasticsearch: {condition: service_healthy}
+    secrets: [elastic_password, kibana_password, logstash_password]
+    volumes:
+      - type: bind
+        source: ${LOGGING_SCRIPTS_DIR:?Set LOGGING_SCRIPTS_DIR}
+        target: /opt/logging
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOGGING_TLS_DIR:?Set LOGGING_TLS_DIR}/public
+        target: /tls
+        read_only: true
+        bind: {create_host_path: false}
+
+  kibana:
+    <<: *common
+    image: docker.elastic.co/kibana/kibana:9.5.4
+    user: "1000:0"
+    cap_drop: [ALL]
+    mem_limit: ${KIBANA_MEMORY_LIMIT:-2g}
+    cpus: ${KIBANA_CPU_LIMIT:-1.0}
+    entrypoint: [/bin/bash, /opt/logging/kibana-entrypoint.sh]
+    environment:
+      KIBANA_PUBLIC_URL: ${KIBANA_PUBLIC_URL:-https://localhost:5601}
+      NODE_OPTIONS: --max-old-space-size=1536
+    depends_on:
+      elasticsearch: {condition: service_healthy}
+    secrets:
+      - kibana_password
+      - kibana_session_key
+      - kibana_saved_objects_key
+      - kibana_reporting_key
+    volumes:
+      - type: bind
+        source: ${LOGGING_CONFIG_DIR:?Set LOGGING_CONFIG_DIR}/kibana.yml
+        target: /usr/share/kibana/config/kibana.yml
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOGGING_SCRIPTS_DIR:?Set LOGGING_SCRIPTS_DIR}
+        target: /opt/logging
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOGGING_TLS_DIR:?Set LOGGING_TLS_DIR}/kibana
+        target: /usr/share/kibana/config/tls
+        read_only: true
+        bind: {create_host_path: false}
+      - kibana-data:/usr/share/kibana/data
+    ports:
+      - ${KIBANA_BIND_ADDRESS:-127.0.0.1}:${KIBANA_PORT:-5601}:5601
+    healthcheck:
+      test:
+        - CMD
+        - /usr/share/kibana/node/bin/node
+        - -e
+        - "require('https').get({host:'localhost',port:5601,path:'/api/status',ca:require('fs').readFileSync('/usr/share/kibana/config/tls/ca.crt')},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+
+  logstash:
+    <<: *common
+    image: docker.elastic.co/logstash/logstash:9.5.4
+    user: "1000:0"
+    cap_drop: [ALL]
+    mem_limit: ${LOGSTASH_MEMORY_LIMIT:-2g}
+    cpus: ${LOGSTASH_CPU_LIMIT:-2.0}
+    stop_grace_period: 2m
+    entrypoint: [/bin/bash, /opt/logging/logstash-entrypoint.sh]
+    environment:
+      LS_JAVA_OPTS: ${LOGSTASH_JAVA_OPTS:--Xms1g -Xmx1g}
+    depends_on:
+      elasticsearch: {condition: service_healthy}
+    secrets: [logstash_password, ingest_password, logstash_keystore_password]
+    volumes:
+      - type: bind
+        source: ${LOGGING_CONFIG_DIR:?Set LOGGING_CONFIG_DIR}/logstash.yml
+        target: /usr/share/logstash/config/logstash.yml
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOGGING_CONFIG_DIR:?Set LOGGING_CONFIG_DIR}/pipelines.yml
+        target: /usr/share/logstash/config/pipelines.yml
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOGGING_CONFIG_DIR:?Set LOGGING_CONFIG_DIR}/pipeline
+        target: /usr/share/logstash/pipeline
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOGGING_SCRIPTS_DIR:?Set LOGGING_SCRIPTS_DIR}
+        target: /opt/logging
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOGGING_TLS_DIR:?Set LOGGING_TLS_DIR}/logstash
+        target: /usr/share/logstash/config/tls
+        read_only: true
+        bind: {create_host_path: false}
+      - logstash-data:/usr/share/logstash/data
+    ports:
+      - ${LOGSTASH_BIND_ADDRESS:-127.0.0.1}:${LOGSTASH_HTTPS_PORT:-8443}:8443
+      - ${LOGSTASH_BIND_ADDRESS:-127.0.0.1}:${LOGSTASH_BEATS_PORT:-5044}:5044
+    healthcheck:
+      test: [CMD, /bin/bash, -c, "exec 3<>/dev/tcp/127.0.0.1/9600"]
+      interval: 30s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
+
+  ops:
+    image: python:3.13-bookworm
+    profiles: [ops]
+    user: "1000:0"
+    init: true
+    restart: "no"
+    networks: [logging]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    mem_limit: 256m
+    cpus: 0.5
+    logging: *bounded-logging
+    entrypoint: [python, /opt/logging/admin.py]
+    command: [check]
+    secrets: [elastic_password, ingest_password]
+    volumes:
+      - type: bind
+        source: ${LOGGING_SCRIPTS_DIR:?Set LOGGING_SCRIPTS_DIR}
+        target: /opt/logging
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOGGING_TLS_DIR:?Set LOGGING_TLS_DIR}/public
+        target: /tls
+        read_only: true
+        bind: {create_host_path: false}
+
+networks:
+  logging:
+    driver: bridge
+
+volumes:
+  es-data:
+  kibana-data:
+  logstash-data:
+
+secrets:
+  elastic_password:
+    file: ${LOGGING_SECRETS_DIR:?Set LOGGING_SECRETS_DIR}/elastic_password
+  kibana_password:
+    file: ${LOGGING_SECRETS_DIR:?Set LOGGING_SECRETS_DIR}/kibana_password
+  logstash_password:
+    file: ${LOGGING_SECRETS_DIR:?Set LOGGING_SECRETS_DIR}/logstash_password
+  ingest_password:
+    file: ${LOGGING_SECRETS_DIR:?Set LOGGING_SECRETS_DIR}/ingest_password
+  logstash_keystore_password:
+    file: ${LOGGING_SECRETS_DIR:?Set LOGGING_SECRETS_DIR}/logstash_keystore_password
+  kibana_session_key:
+    file: ${LOGGING_SECRETS_DIR:?Set LOGGING_SECRETS_DIR}/kibana_session_key
+  kibana_saved_objects_key:
+    file: ${LOGGING_SECRETS_DIR:?Set LOGGING_SECRETS_DIR}/kibana_saved_objects_key
+  kibana_reporting_key:
+    file: ${LOGGING_SECRETS_DIR:?Set LOGGING_SECRETS_DIR}/kibana_reporting_key

@@ -1,0 +1,6 @@
+**
+!.agent/
+!.agent/Dockerfile
+!.agent/install-tools.py
+!scripts/
+!scripts/requirements-validation.txt

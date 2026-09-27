@@ -1,0 +1,14 @@
+{
+  "index_patterns": ["logs-kubernetes-*"],
+  "priority": 501,
+  "data_stream": {},
+  "composed_of": ["logs@mappings", "logs@settings", "ecs@mappings"],
+  "template": {
+    "settings": {
+      "index.number_of_shards": 1,
+      "index.number_of_replicas": 1,
+      "index.lifecycle.name": "platform-logs-14d"
+    }
+  },
+  "_meta": {"description": "Platform Kubernetes logs: one replica and an explicit ILM policy"}
+}

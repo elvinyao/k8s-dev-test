@@ -1,0 +1,18 @@
+# Store the completed file as key alertmanager.yaml in secret alertmanager-config.
+global:
+  resolve_timeout: 5m
+route:
+  receiver: operations
+  group_by: [cluster, namespace, alertname]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+receivers:
+  - name: operations
+    webhook_configs:
+      - url: https://alerts.example.invalid/alertmanager
+        send_resolved: true
+inhibit_rules:
+  - source_matchers: ['severity="critical"']
+    target_matchers: ['severity="warning"']
+    equal: [cluster, namespace, alertname]

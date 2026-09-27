@@ -1,0 +1,50 @@
+# Pinned chart inputs for scripts/render.py. Never deploy from a moving branch.
+kubernetesVersion: 1.35.8
+charts:
+  - name: argocd
+    chart: argo-cd
+    repository: https://argoproj.github.io/argo-helm
+    version: 10.9.2
+    namespace: argocd
+    values:
+      local: platform/argocd/values-local.yaml
+      production: platform/argocd/values-production.yaml
+  - name: monitoring
+    chart: kube-prometheus-stack
+    repository: https://prometheus-community.github.io/helm-charts
+    version: 91.5.2
+    namespace: monitoring
+    values:
+      local: platform/monitoring/values-local.yaml
+      production: platform/monitoring/values-production.yaml
+  - name: elastic-operator
+    chart: eck-operator
+    repository: https://helm.elastic.co
+    version: 3.5.0
+    namespace: elastic-system
+    values:
+      local: platform/logging/operator-values.yaml
+      production: platform/logging/operator-values.yaml
+  - name: envoy-gateway
+    chart: oci://docker.io/envoyproxy/gateway-helm
+    argocdRepository: registry-1.docker.io/envoyproxy
+    version: v1.9.1
+    namespace: gateway-system
+    values:
+      local: platform/networking/envoy-values.yaml
+      production: platform/networking/envoy-values.yaml
+  - name: cert-manager
+    chart: cert-manager
+    repository: https://charts.jetstack.io
+    version: v1.21.2
+    namespace: cert-manager
+    values:
+      local: platform/security/cert-manager-values.yaml
+      production: platform/security/cert-manager-values.yaml
+  - name: gitlab
+    chart: gitlab
+    repository: https://charts.gitlab.io
+    version: 10.4.1
+    namespace: gitlab
+    values:
+      production: platform/gitlab/values-production.yaml.example

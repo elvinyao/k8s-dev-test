@@ -1,0 +1,10 @@
+managedNamespaces: [logging]
+replicaCount: 2
+resources:
+  requests: {cpu: 100m, memory: 256Mi}
+  limits: {cpu: "1", memory: 1Gi}
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+config:
+  logVerbosity: "0"

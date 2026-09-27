@@ -1,0 +1,16 @@
+server.name: platform-kibana
+server.host: 0.0.0.0
+server.publicBaseUrl: ${KIBANA_PUBLIC_URL}
+server.ssl.enabled: true
+server.ssl.certificate: /usr/share/kibana/config/tls/server.crt
+server.ssl.key: /usr/share/kibana/config/tls/server.key
+elasticsearch.hosts: ["https://elasticsearch:9200"]
+elasticsearch.username: kibana_system
+elasticsearch.ssl.certificateAuthorities: [/usr/share/kibana/config/tls/ca.crt]
+elasticsearch.ssl.verificationMode: full
+xpack.security.secureCookies: true
+xpack.security.session.idleTimeout: 30m
+xpack.security.session.lifespan: 8h
+telemetry.enabled: false
+# Password and the three persistent encryption keys are loaded into kibana.keystore.
+

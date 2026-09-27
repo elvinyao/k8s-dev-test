@@ -1,0 +1,7 @@
+# Add reachable, explicitly authorized exporter endpoints here.
+# Example group (replace the host before uncommenting):
+# - targets: [linux-node.example.internal:9100]
+#   labels:
+#     service: node-exporter
+#     environment: staging
+[]

@@ -1,0 +1,38 @@
+concurrent = 2
+check_interval = 3
+shutdown_timeout = 540
+
+[[runners]]
+  name = "platform-kubernetes"
+  url = "https://gitlab.example.invalid"
+  token = "REPLACE_WITH_RUNNER_AUTHENTICATION_TOKEN_IN_PRIVATE_FILE"
+  executor = "kubernetes"
+  request_concurrency = 2
+  [runners.feature_flags]
+    FF_USE_LEGACY_KUBERNETES_EXECUTION_STRATEGY = false
+    FF_PRINT_POD_EVENTS = false
+  [runners.kubernetes]
+    context = "gitlab-ci"
+    namespace = "ci-jobs"
+    image = "alpine:3.24.1"
+    service_account = "gitlab-job"
+    automount_service_account_token = false
+    privileged = false
+    allow_privilege_escalation = false
+    cap_drop = ["ALL"]
+    namespace_overwrite_allowed = ""
+    service_account_overwrite_allowed = ""
+    bearer_token_overwrite_allowed = false
+    cpu_request = "250m"
+    cpu_limit = "1"
+    memory_request = "256Mi"
+    memory_limit = "1Gi"
+    helper_cpu_request = "100m"
+    helper_cpu_limit = "500m"
+    helper_memory_request = "128Mi"
+    helper_memory_limit = "512Mi"
+    service_cpu_request = "100m"
+    service_cpu_limit = "500m"
+    service_memory_request = "128Mi"
+    service_memory_limit = "512Mi"
+    poll_timeout = 300

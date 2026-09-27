@@ -1,0 +1,27 @@
+# Optional overlay AFTER values-production.yaml.example; prepare DNS/TLS/storage.
+global:
+  hosts:
+    registry:
+      name: registry.example.invalid
+  registry:
+    bucket: platform-gitlab-registry
+registry:
+  enabled: true
+  gatewayRoute:
+    sectionName: https
+  storage:
+    secret: gitlab-registry-storage
+    key: config
+    redirect:
+      disable: true
+  # Start without the optional metadata DB; enabling it requires a separate
+  # external database, migrations, credentials and a coordinated backup plan.
+  database:
+    enabled: false
+    configure: false
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      memory: 1Gi

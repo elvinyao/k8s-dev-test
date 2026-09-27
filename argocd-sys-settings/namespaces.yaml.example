@@ -1,0 +1,16 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-namespaces
+  namespace: argocd
+spec:
+  project: platform-sys
+  source:
+    repoURL: https://git.example.invalid/platform/k8s-dev-test.git
+    targetRevision: main
+    path: platform/namespaces
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  # No automated sync, pruning, namespace creation, or cascading deletion.
+  syncPolicy: {}

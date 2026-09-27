@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform-apps-production
+  namespace: argocd
+spec:
+  sourceRepos:
+    - https://git.example.invalid/business/deployments.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: apps-prod
+  clusterResourceWhitelist: []
+  clusterResourceBlacklist:
+    - group: '*'
+      kind: '*'
+  namespaceResourceWhitelist:
+    - {group: apps, kind: Deployment}
+    - {group: apps, kind: StatefulSet}
+    - {group: '', kind: Service}
+    - {group: '', kind: ConfigMap}
+    - {group: '', kind: PersistentVolumeClaim}
+    - {group: autoscaling, kind: HorizontalPodAutoscaler}
+    - {group: policy, kind: PodDisruptionBudget}
+    - {group: batch, kind: Job}
+    - {group: batch, kind: CronJob}

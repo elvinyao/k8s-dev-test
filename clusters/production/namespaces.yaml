@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+  labels: {platform.example.com/gateway-access: "true"}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels: {platform.example.com/gateway-access: "true"}
+---
+apiVersion: v1
+kind: Namespace
+metadata: {name: elastic-system}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: logging
+  labels: {platform.example.com/gateway-access: "true"}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gitlab
+  labels: {platform.example.com/gateway-access: "true"}
+---
+apiVersion: v1
+kind: Namespace
+metadata: {name: gateway-system}
+---
+apiVersion: v1
+kind: Namespace
+metadata: {name: cert-manager}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: apps-prod
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.35
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: v1.35
