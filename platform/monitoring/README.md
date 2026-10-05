@@ -13,11 +13,16 @@ Grafana 单副本10Gi、Recreate。Grafana 当前用本地数据库，升级存�
 | Secret | keys |
 | --- | --- |
 | `grafana-admin` | `admin-user`、`admin-password` |
+| `grafana-encryption` | `secret-key`，独立生成并持久保管的强随机加密 key |
 | `alertmanager-config` | `alertmanager.yaml`，完整有效配置 |
 
 `alertmanager.yaml.example` 是接收器示例，替换成实际通知端点后再写入 Secret；
 验证外发 firing/resolved，不能只看 UI。真实 URL/token 不提交。Grafana 初始密码只用于
 新数据库初始化，已有账号密码需要通过管理流程轮换。
+`grafana-encryption` 经 `GF_SECURITY_SECRET_KEY` 注入，必须与 Grafana 数据库一起恢复；
+不要在重装或常规重启时重新生成。轮换需要按照 Grafana 加密迁移流程执行，直接替换可能
+导致已有数据源等秘密无法解密。该 key 不与管理员密码共用。
+[Grafana 数据库加密说明](https://grafana.com/docs/grafana/latest/setup-grafana/configure-security/configure-database-encryption/)。
 
 修改生产 storageClass、Grafana域名、资源/保留量，手动同步 monitoring Application。
 CRD 大小可能超过客户端 annotation 限制，因此 GitOps 使用 ServerSideApply；

@@ -21,10 +21,13 @@ output = (ROOT / args.output).resolve()
 if not output.is_relative_to(ROOT):
     parser.error('Output must remain inside this repository')
 releases = yaml.safe_load((ROOT / 'platform/releases.yaml').read_text())['charts']
-namespaces = ['argocd', 'monitoring', 'elastic-system', 'gateway-system', 'cert-manager', 'logging', 'gitlab']
+if any(release.get('management') not in {'helm', 'argocd'} for release in releases):
+    parser.error('Every chart must declare management: helm or argocd')
+# cert-manager leader election and monitoring CoreDNS discovery use kube-system.
+namespaces = ['argocd', 'monitoring', 'elastic-system', 'gateway-system', 'cert-manager', 'logging', 'kube-system']
 repos = {args.repo_url}
 for release in releases:
-    if release['name'] != 'argocd':
+    if release['management'] == 'argocd':
         repos.add(release.get('argocdRepository', release.get('repository', '')))
 cluster_resources = {
     '': ['Namespace'],
@@ -50,8 +53,8 @@ project = {
 }
 objects = [project]
 for release in releases:
-    # Argo CD itself remains owned by its explicit bootstrap Helm release.
-    if release['name'] == 'argocd':
+    # Bootstrap and lifecycle-sensitive charts remain explicit Helm releases.
+    if release['management'] != 'argocd':
         continue
     chart = release['chart'].rsplit('/', 1)[-1]
     objects.append({

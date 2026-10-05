@@ -3,6 +3,10 @@ global:
   domain: argocd.example.invalid
   affinity:
     podAntiAffinity: hard
+  # The chart's server policy allows all ingress. Keep only the component
+  # policies enabled below; the platform networking policy owns server access.
+  networkPolicy:
+    create: false
 configs:
   secret:
     createSecret: false
@@ -42,17 +46,20 @@ redis-ha:
     enabled: false
 controller:
   replicas: 2
+  networkPolicy: {create: true}
   resources:
     requests: {cpu: 500m, memory: 1Gi}
     limits: {cpu: "2", memory: 2Gi}
 repoServer:
   replicas: 2
+  networkPolicy: {create: true}
   resources:
     requests: {cpu: 250m, memory: 512Mi}
     limits: {cpu: "2", memory: 2Gi}
   pdb: {enabled: true, minAvailable: 1}
 server:
   replicas: 2
+  networkPolicy: {create: false}
   service: {type: ClusterIP}
   resources:
     requests: {cpu: 100m, memory: 256Mi}

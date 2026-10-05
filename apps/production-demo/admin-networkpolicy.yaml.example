@@ -1,0 +1,26 @@
+# Platform-admin owned. Deliberately excluded from this app's Kustomization:
+# the business AppProject cannot create NetworkPolicy resources.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: production-demo-self-check
+  namespace: apps-prod
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: production-demo
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: production-demo
+      ports:
+        - {protocol: TCP, port: 8080}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: production-demo
+      ports:
+        - {protocol: TCP, port: 8080}

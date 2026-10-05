@@ -9,13 +9,14 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --docker) AGENT_DOCKER=1; shift ;;
     --toolbox) AGENT_TOOLBOX=1; shift ;;
-    --kubeconfig|--network|--host-dir|--socket)
+    --kubeconfig|--network|--host-dir|--socket|--publish)
       [ "$#" -ge 2 ] || { printf '%s\n' "Missing value for $1" >&2; exit 2; }
       case "$1" in
         --kubeconfig) AGENT_KUBECONFIG="$2" ;;
         --network) AGENT_NETWORK="$2" ;;
         --host-dir) AGENT_HOST_DIR="$2" ;;
         --socket) AGENT_DOCKER_SOCKET="$2" ;;
+        --publish) AGENT_PUBLISH="$2" ;;
       esac
       shift 2 ;;
     --) shift; break ;;
@@ -43,6 +44,13 @@ if [ "${AGENT_TOOLBOX:-0}" = 1 ]; then
 fi
 
 DOCKER_ARGS=(--rm -i --init)
+if [ -n "${AGENT_PUBLISH:-}" ]; then
+  if [[ ! "$AGENT_PUBLISH" =~ ^127\.0\.0\.1:[0-9]{1,5}:[0-9]{1,5}$ ]]; then
+    printf '%s\n' '--publish must be an explicit loopback mapping, e.g. 127.0.0.1:8443:8443' >&2
+    exit 2
+  fi
+  DOCKER_ARGS+=(-p "$AGENT_PUBLISH")
+fi
 if [ "${AGENT_DOCKER:-0}" = 1 ]; then
   SOCKET="${AGENT_DOCKER_SOCKET:-/var/run/docker.sock}"
   if [ ! -S "$SOCKET" ]; then

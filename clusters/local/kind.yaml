@@ -1,4 +1,4 @@
-# Planned topology; cluster creation is a separate implementation step.
+# Local topology managed through scripts/local_cluster.py; never a production cluster.
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: platform-local

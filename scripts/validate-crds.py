@@ -6,12 +6,13 @@ from pathlib import Path
 import sys
 import yaml
 from jsonschema import Draft7Validator
+from rendered_inputs import checked_documents
 
 ROOT = Path(__file__).resolve().parents[1]
 yaml.SafeLoader.add_constructor('tag:yaml.org,2002:value', yaml.SafeLoader.construct_scalar)
 schemas = {}
-for path in (ROOT / 'rendered/production').glob('*.yaml'):
-    for obj in yaml.safe_load_all(path.read_text()):
+for documents in checked_documents(ROOT / 'rendered/production', 'name').values():
+    for obj in documents:
         if not obj or obj.get('kind') != 'CustomResourceDefinition':
             continue
         spec = obj['spec']
@@ -26,8 +27,8 @@ builtin_groups = {'', 'apps', 'batch', 'policy', 'networking.k8s.io', 'rbac.auth
 errors = []
 validated = 0
 skipped = 0
-for path in (ROOT / 'rendered/kustomize').glob('*.yaml'):
-    for obj in yaml.safe_load_all(path.read_text()):
+for path, documents in checked_documents(ROOT / 'rendered/kustomize', 'path').items():
+    for obj in documents:
         if not obj:
             continue
         key = (obj['apiVersion'], obj['kind'])
@@ -35,12 +36,12 @@ for path in (ROOT / 'rendered/kustomize').glob('*.yaml'):
         if schema is None:
             group = obj['apiVersion'].split('/')[0] if '/' in obj['apiVersion'] else ''
             if group not in builtin_groups:
-                errors.append(f'{path.name}: no schema found for {key}')
+                errors.append(f'{path}: no schema found for {key}')
             skipped += 1
             continue
         for error in Draft7Validator(schema).iter_errors(obj):
             location = '/'.join(str(p) for p in error.absolute_path)
-            errors.append(f'{path.name}:{obj["kind"]}/{obj["metadata"]["name"]}:{location}: {error.message}')
+            errors.append(f'{path}:{obj["kind"]}/{obj["metadata"]["name"]}:{location}: {error.message}')
         validated += 1
 if not validated:
     errors.append('No custom resources validated; render Kustomize entrypoints first.')

@@ -3,8 +3,10 @@
 提供可以按环境配置的部署示例：Kubernetes nodes、Argo CD、Prometheus/Alertmanager/Grafana、
 ELK、PV/PVC、GitLab/Runner/Registry，以及 GitOps、TLS、权限和备份恢复。
 
-**当前交付是配置与运维文档，不是已经上线的生产集群。** Compose 配置解析与 Helm/Kustomize
-渲染用于检查配置；生产使用前还需填入真实域名、秘密、存储及后端，并完成运行与恢复验收。
+**当前交付包含可运行的本地基线、配置示例与运维文档，尚未通过生产验收。** 已完成 kind
+三节点、Argo CD/PVC、实际 GitOps 同步与项目资源拒绝的隔离验证，以及监控 Compose 空卷恢复、Logstash/GitLab
+原生配置检查；其他离线检查和限制见验证记录。生产使用前还需
+填入真实域名、秘密、存储及后端，并完成目标环境运行与恢复验收。
 
 ## 从哪里开始
 
@@ -13,7 +15,8 @@ ELK、PV/PVC、GitLab/Runner/Registry，以及 GitOps、TLS、权限和备份恢
 | 构建工具箱与执行所有校验 | [容器工具链](docs/tooling.md) |
 | 已完成的检查与待验收范围 | [配置验证记录](docs/verification.md) |
 | 部署到已有多节点 Kubernetes | [生产部署手册](docs/production.md) |
-| 本地 kind 的拓扑与执行限制 | [本地集群](docs/local-cluster.md) |
+| 启动本地三节点、Argo CD 与 PVC | [本地集群](docs/local-cluster.md) |
+| 验证真实 Git 同步、漂移恢复与项目限制 | [GitOps 运行验收](docs/gitops-validation.md) |
 | 单机独立监控栈 | [Monitoring Compose](compose/monitoring/README.md) |
 | 单机独立 ELK（TLS/认证） | [Logging Compose](compose/logging/README.md) |
 | 单机 GitLab 与独立 Runner | [GitLab Compose](compose/gitlab/README.md) |
@@ -43,12 +46,22 @@ platform/storage/          本地与生产 CSI 示例
 argocd-sys-settings/        管理员平台入口
 argocd-app-settings/        受限业务项目
 compose/                    monitoring / logging / gitlab
-scripts/                    渲染、校验、GitOps 生成与只读 preflight
+scripts/                    本地自举、运行验证、渲染、GitOps 生成与只读 preflight
 ```
 
 所有执行通过 `bash .agent/run.sh ...`；宿主只检查与编辑源码，详见 [AGENTS.md](AGENTS.md)。
 真实 `.env`、密码、kubeconfig、运行数据、缓存和渲染文件不进入 Git。
-仓库当前在 `main`，尚未提交初始 commit 或配置 remote；GitOps 使用前须提交并推送。
+GitOps 使用前须提交并推送环境配置，使用审核后的完整 commit SHA。
+
+工具箱构建完成后，一条命令执行全部离线检查并生成结果报告：
+
+```sh
+bash .agent/run.sh --toolbox python scripts/verify.py
+```
+
+报告位于 `rendered/verification/report.json`，包含源码指纹、Git 状态、各步骤结果和日志位置。
+Argo CD 与 GitLab 由 Helm 管理生命周期；其余平台 chart 及网络、ELK 配置由生成的
+Argo CD Application 管理，具体归属记录在 `platform/releases.yaml`。
 
 组件不自动一次性启动，不默认启用自动同步/prune。先完成基础设施，再逐层接入服务；
 源版本、凭据与恢复材料需要保留独立于集群内 GitLab 的副本。

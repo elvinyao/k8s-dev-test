@@ -13,7 +13,7 @@ Runner `alpine-v19.4.1`。均来自 GitLab 官方仓库：[GitLab 镜像](https:
 运行前复核对应补丁公告；修改版本时同时更新 digest，不能只改 tag。EE 镜像可以运行 Free 层，
 付费能力是否可用取决于许可证，本方案不替代许可证。
 
-建议使用专用 Linux 宿主；本机 macOS Docker Desktop 仅作演练。
+建议使用专用 Linux 宿主；本机 macOS 的 OrbStack Docker 环境仅作演练。
 GitLab 官方 20 RPS / 1,000 用户单机参考为 **8 vCPU、16 GB RAM**，且不提供 HA；
 本模板以此设置 GitLab 容器上限，宿主还需给操作系统和代理留余量。
 CI 工作负载另算，不能把该数值当作 GitLab、Kubernetes、ELK 等全部服务的总预算。

@@ -11,6 +11,15 @@ files = [p for p in ROOT.rglob('*') if p.is_file()
          and not any(part in ignored for part in p.relative_to(ROOT).parts)]
 counts = {'python': 0, 'shell': 0, 'local_links': 0}
 errors = []
+examples = [str(p.relative_to(ROOT)) for p in files if p.name.endswith('.example')]
+if examples:
+    result = subprocess.run(['git', '-c', 'safe.directory=' + str(ROOT), 'check-ignore',
+                             '--no-index', '--stdin', '-z'], cwd=ROOT,
+                            input='\0'.join(examples) + '\0', text=True, capture_output=True)
+    if result.returncode not in {0, 1}:
+        raise RuntimeError('Unable to check whether configuration examples are ignored by Git')
+    errors.extend('Configuration example ignored by Git: ' + name
+                  for name in result.stdout.split('\0') if name)
 for path in files:
     if path.suffix == '.py':
         ast.parse(path.read_text(), filename=str(path))

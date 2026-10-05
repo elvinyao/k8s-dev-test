@@ -5,6 +5,7 @@
 .kube/
 kubeconfig
 kubeconfig.*
+!compose/gitlab/runner/kubeconfig.yaml.example
 *.kubeconfig
 *.key
 *.pem

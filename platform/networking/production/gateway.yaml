@@ -16,6 +16,24 @@ spec:
     kubernetes:
       envoyDeployment:
         replicas: 2
+        strategy:
+          type: RollingUpdate
+          rollingUpdate:
+            maxSurge: 1
+            maxUnavailable: 0
+        pod:
+          labels:
+            platform.example.com/gateway: platform
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      platform.example.com/gateway: platform
+                  topologyKey: kubernetes.io/hostname
+      envoyPDB:
+        name: platform-envoy
+        minAvailable: 1
       envoyService:
         type: LoadBalancer
 ---

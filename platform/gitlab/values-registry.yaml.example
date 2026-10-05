@@ -4,6 +4,7 @@ global:
     registry:
       name: registry.example.invalid
   registry:
+    enabled: true
     bucket: platform-gitlab-registry
 registry:
   enabled: true

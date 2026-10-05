@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import subprocess
 
 import yaml
@@ -20,6 +21,18 @@ def run(*args, capture=False):
                           stdout=subprocess.PIPE if capture else None).stdout
 
 
+def verify_archive(archive, chart):
+    expected = chart.get('archiveSha256', '')
+    if not isinstance(expected, str) or not re.fullmatch(r'[0-9a-f]{64}', expected):
+        raise ValueError(f"Missing or invalid archiveSha256 for {chart['name']}")
+    actual = hashlib.sha256(archive.read_bytes()).hexdigest()
+    if actual != expected:
+        raise ValueError(f"Chart checksum mismatch for {chart['name']}: "
+                         f'expected {expected}, got {actual}. '
+                         'Investigate the archive; never update the lock automatically.')
+    return actual
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--environment', choices=['local', 'production'], required=True)
@@ -34,6 +47,13 @@ def main():
               and (not args.component or c['name'] == args.component)]
     if not charts:
         parser.error('Unknown component or no values for the requested environment')
+    summary_path = output / ('summary.json' if not args.component else f'{args.component}-summary.json')
+    # Invalidate previous success before changing any rendered output. A partial
+    # component render also invalidates the previous full-environment summary.
+    (output / 'summary.json').unlink(missing_ok=True)
+    summary_path.unlink(missing_ok=True)
+    for chart in charts:
+        (output / f"{chart['name']}.yaml").unlink(missing_ok=True)
     for chart in charts:
         print(f"Rendering {chart['name']} {chart['version']} ({args.environment})", flush=True)
         cache = ROOT / '.cache/charts' / f"{chart['name']}-{chart['version']}"
@@ -49,9 +69,11 @@ def main():
         if len(archives) != 1:
             raise ValueError(f'Expected one chart archive in {cache}')
         archive = archives[0]
+        checksum = verify_archive(archive, chart)
         metadata = yaml.safe_load(run('helm', 'show', 'chart', str(archive), capture=True))
-        if str(metadata['version']).lstrip('v') != str(chart['version']).lstrip('v'):
-            raise ValueError(f'Chart version mismatch: {archive}')
+        if (str(metadata['version']).lstrip('v') != str(chart['version']).lstrip('v')
+                or metadata['name'] != chart['chart'].rsplit('/', 1)[-1]):
+            raise ValueError(f'Chart name/version mismatch: {archive}')
         (cache / 'upstream-values.yaml').write_text(
             run('helm', 'show', 'values', str(archive), capture=True))
         values = chart['values'][args.environment]
@@ -66,9 +88,9 @@ def main():
         (output / f"{chart['name']}.yaml").write_text(rendered)
         summary.append({'name': chart['name'], 'chartVersion': metadata['version'],
                         'appVersion': metadata.get('appVersion'), 'objects': len(documents),
-                        'archiveSha256': hashlib.sha256(archive.read_bytes()).hexdigest()})
-    (output / ('summary.json' if not args.component else f'{args.component}-summary.json')).write_text(
-        json.dumps(summary, indent=2) + '\n')
+                        'archiveSha256': checksum,
+                        'manifestSha256': hashlib.sha256(rendered.encode()).hexdigest()})
+    summary_path.write_text(json.dumps(summary, indent=2) + '\n')
     print(json.dumps(summary, indent=2))
     print('Rendered and linted only; no API admission, scheduling, storage or runtime verification.')
 

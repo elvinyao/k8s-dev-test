@@ -1,0 +1,38 @@
+# Independent, disposable configuration job. Never combine with compose.yaml.
+services:
+  config-check:
+    image: ${GITLAB_IMAGE:?Use the pinned image from .env.example}
+    entrypoint: ['/opt/gitlab/embedded/bin/ruby']
+    command: ['/validation/check.rb']
+    user: '65534:65534'
+    read_only: true
+    network_mode: none
+    cpus: 1
+    mem_limit: 512m
+    pids_limit: 128
+    cap_drop: ['ALL']
+    security_opt: ['no-new-privileges:true']
+    # Override image VOLUMEs so even anonymous persistent volumes are avoided.
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m,mode=1777
+      - /etc/gitlab:rw,noexec,nosuid,nodev,size=1m,mode=1777
+      - /var/log/gitlab:rw,noexec,nosuid,nodev,size=1m,mode=1777
+      - /var/opt/gitlab:rw,noexec,nosuid,nodev,size=1m,mode=1777
+    volumes:
+      - type: bind
+        source: ${GITLAB_VALIDATION_DIR:?Set isolated validation fixture directory}
+        target: /validation
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${GITLAB_VALIDATION_DIR:?Set isolated validation fixture directory}/root_password
+        target: /run/secrets/gitlab_root_password
+        read_only: true
+        bind:
+          create_host_path: false
+    logging:
+      driver: json-file
+      options:
+        max-size: '5m'
+        max-file: '2'

@@ -14,7 +14,6 @@ import urllib.request
 import uuid
 
 
-CONTEXT = ssl.create_default_context(cafile="/tls/ca.crt")
 ES = "https://elasticsearch:9200"
 
 
@@ -30,7 +29,8 @@ def request(method, path, data=None, *, endpoint=ES, user="elastic", secret="ela
     headers = {"Authorization": f"Basic {token}", "Content-Type": "application/json"}
     body = None if data is None else json.dumps(data).encode()
     req = urllib.request.Request(endpoint + path, data=body, headers=headers, method=method)
-    with urllib.request.urlopen(req, context=CONTEXT, timeout=90) as response:
+    context = ssl.create_default_context(cafile="/tls/ca.crt")
+    with urllib.request.urlopen(req, context=context, timeout=90) as response:
         result = response.read()
     try:
         return json.loads(result) if result else {}
@@ -122,6 +122,30 @@ def valid_name(value):
     return value
 
 
+def restore_logs(snapshot, prefix):
+    # A closed index may otherwise be overwritten by Elasticsearch's restore
+    # API. Include hidden/closed indices and aliases when reserving the prefix.
+    existing = request("GET", f"/_resolve/index/{prefix}-*?expand_wildcards=all")
+    if any(existing.get(kind) for kind in ("indices", "aliases", "data_streams")):
+        raise SystemExit("Restore prefix is already in use; choose a new prefix. No restore was requested.")
+    result = request("POST", f"/_snapshot/platform-filesystem/{snapshot}/_restore?wait_for_completion=true", {
+        "indices": "platform-logs-*",
+        "include_global_state": False,
+        "feature_states": ["none"],
+        "rename_pattern": "(.+)",
+        "rename_replacement": prefix + "-$1",
+        "include_aliases": False,
+        "index_settings": {"number_of_replicas": 0},
+        "ignore_index_settings": ["index.lifecycle.name"],
+    })
+    print(json.dumps(result, indent=2))
+    shards = result.get("snapshot", {}).get("shards", {})
+    total = shards.get("total", 0)
+    if total < 1 or shards.get("failed") != 0 or shards.get("successful") != total:
+        raise SystemExit("Restore completion was not proven; inspect recovery and shard state before retrying.")
+    print("Restored logs under a new prefix without restoring security state or Kibana state.")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -151,20 +175,7 @@ def main():
         result = request("GET", "/_snapshot/platform-filesystem/_all")
         print(json.dumps([{"snapshot": s["snapshot"], "state": s["state"], "start_time": s.get("start_time")} for s in result["snapshots"]], indent=2))
     elif args.command == "restore-logs":
-        result = request("POST", f"/_snapshot/platform-filesystem/{args.snapshot}/_restore?wait_for_completion=true", {
-            "indices": "platform-logs-*",
-            "include_global_state": False,
-            "feature_states": ["none"],
-            "rename_pattern": "(.+)",
-            "rename_replacement": args.prefix + "-$1",
-            "include_aliases": False,
-            "index_settings": {"number_of_replicas": 0},
-            "ignore_index_settings": ["index.lifecycle.name"],
-        })
-        print(json.dumps(result, indent=2))
-        if result.get("snapshot", {}).get("shards", {}).get("failed", 0):
-            raise SystemExit("Restore reported failed shards.")
-        print("Restored logs under a new prefix without replacing live indices, security state or Kibana state.")
+        restore_logs(args.snapshot, args.prefix)
 
 
 if __name__ == "__main__":

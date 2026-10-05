@@ -34,6 +34,13 @@ bash .agent/run.sh python compose/logging/scripts/prepare.py \
 
 服务证书有效期 365 天，CA 为 10 年。已有完整初始化重复执行时保留所有密钥和密码；参数改变、缺少文件、部分初始化均会停止，不会悄悄生成新 CA。证书轮换需提前告警、签发和维护窗口；不要通过删除 `runtime/` 轮换凭证。企业环境可由 PKI/secret manager 提供同名文件，保留内部服务名 SAN；CA 私钥应保存在离线或受控签发环境。
 
+初始化回归检查可独立运行；它在一次性 runner 的临时目录实际生成证书，验证 SAN、证书链、用途、密钥匹配、容器 UID/GID 读写权限，以及重复执行保留密钥和失败清理行为。它不使用本目录已有的 `.env`、secret 或数据，也不启动 ELK：
+
+```sh
+bash .agent/run.sh --toolbox python -m unittest discover \
+  -s scripts/tests -p test_logging_prepare.py -v
+```
+
 生成的密码为独立的随机 64 位十六进制字符串，默认不打印。secret 文件为 root:root、0640，长期服务为 UID 1000 / GID 0；CA 私钥为 0600。Compose 的本地 file secrets 本质上仍是磁盘文件，需要磁盘加密、访问控制和独立加密备份。不要把 `.env`、`runtime/`、CA 私钥或密码提交到 Git。
 
 复核 `.env` 中的所有路径，不能把 `/workspace` 用作宿主 bind 源。远程部署另需设置 `KIBANA_BIND_ADDRESS`、`LOGSTASH_BIND_ADDRESS` 为实际私网地址，调整 `KIBANA_PUBLIC_URL`。IPv4/DNS 是此脚本生成 public URL 的预期输入；IPv6 公网入口需自行设置带方括号的 URL。`ELASTICSEARCH_BIND_ADDRESS` 可以继续保持回环地址。浏览器与采集器应导入 `runtime/tls/public/ca.crt`，不要跳过 TLS 校验。
@@ -50,6 +57,20 @@ bash .agent/run.sh docker compose \
   --env-file compose/logging/.env.example \
   -f compose/logging/compose.yaml config
 ```
+
+需要实际验证 Logstash 插件参数和 keystore 启动脚本时，运行以下独立检查。它拉取上述固定版本的官方镜像，在忽略的 `.local/` 下创建一次性配置和凭据副本，执行 `--config.test_and_exit`；不启动 Elasticsearch/Kibana、不发布端口，也不读取现有部署的密码或数据。结束后仅清理本次随机项目的容器、网络和卷；日志和含镜像 digest、配置 SHA256 的报告留在输出路径。清理失败会保留 fixture 并报告随机项目名，需先处理它再重跑。
+
+```sh
+bash .agent/run.sh --docker --toolbox \
+  python compose/logging/scripts/validate-logstash.py
+```
+
+2026-10-05 已通过该检查：Logstash 9.5.4 的官方容器完成 keystore 初始化，并对本目录 pipeline 返回 `Configuration OK`。此检查不连接 Elasticsearch，也不证明日志写入、磁盘持久化或快照恢复成功；这些由后续部署验收完成。
+
+完整的隔离运行入口见[ELK 运行验收](validation.md)。它先检查资源，再使用独立临时项目运行
+三服务、真实 Filebeat、权限拒绝检查、重启及空 Elasticsearch 卷上的日志快照恢复。
+该完整流程目前尚未通过运行验收；本机 Docker 约 8 GiB，已被前置容量检查拒绝。
+在容量足够的目标 Docker 环境执行，不要通过降低堆内存或关闭 bootstrap checks 绕过检查。
 
 完成初始化并审核 `.env` 后，依次执行以下命令。首次先启动 Elasticsearch，然后创建服务账号及策略，最后启动采集和界面；正常 `up` 不会运行 `init` 或 `ops` profile。
 
@@ -128,7 +149,9 @@ bash .agent/run.sh --docker docker compose \
   --snapshot platform-20260926-023000 --prefix drill-20260926
 ```
 
-该操作将日志恢复为 `drill-20260926-platform-logs-*`，不覆盖在线索引、不恢复安全/Kibana feature state，并移除原 ILM policy，防止演练数据立刻因年龄被删除。比较文档数、时间范围、抽样内容和耗时后，再由运维显式清理演练索引。完整灾难恢复应在隔离集群验证 ES 版本兼容性、系统 feature states、角色/密码和 Kibana 加密 key；安全索引恢复会改变身份状态，不能把上述“仅恢复日志”命令当作全平台恢复。
+该操作将日志恢复为 `drill-20260926-platform-logs-*`，不恢复安全/Kibana feature state，并移除原 ILM policy，防止演练数据立刻因年龄被删除。执行前先查询全部状态的索引、别名和 data stream；若前缀已存在则拒绝发送恢复请求，包含可能被 Elasticsearch 恢复 API 覆盖的已关闭索引。检查与恢复是两个 API 请求，运维需为这次演练独占该前缀，避免另一任务在间隙创建同名资源；见 [官方恢复约束](https://www.elastic.co/docs/deploy-manage/tools/snapshot-and-restore/restore-snapshot)。脚本仅在返回非零分片数、全部成功且失败数为 0 时报告完成；超时或结果不完整时先检查恢复状态，不要立即重试。
+
+比较文档数、时间范围、抽样内容和耗时后，再由运维显式清理演练索引。完整灾难恢复应在隔离集群验证 ES 版本兼容性、系统 feature states、角色/密码和 Kibana 加密 key；安全索引恢复会改变身份状态，不能把上述“仅恢复日志”命令当作全平台恢复。
 
 ## 升级到多节点生产拓扑
 

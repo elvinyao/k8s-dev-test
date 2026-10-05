@@ -6,6 +6,11 @@ grafana:
     existingSecret: grafana-admin
     userKey: admin-user
     passwordKey: admin-password
+  envValueFrom:
+    GF_SECURITY_SECRET_KEY:
+      secretKeyRef:
+        name: grafana-encryption
+        key: secret-key
   service: {type: ClusterIP}
   persistence:
     enabled: true

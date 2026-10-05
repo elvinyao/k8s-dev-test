@@ -2,49 +2,61 @@
 kubernetesVersion: 1.35.8
 charts:
   - name: argocd
+    management: helm
     chart: argo-cd
     repository: https://argoproj.github.io/argo-helm
     version: 10.9.2
+    archiveSha256: 970ced346a0ddc3e475a7ff780e9b9c2fdebc07d9a367d2edb6ef4f49832c24a
     namespace: argocd
     values:
       local: platform/argocd/values-local.yaml
       production: platform/argocd/values-production.yaml
   - name: monitoring
+    management: argocd
     chart: kube-prometheus-stack
     repository: https://prometheus-community.github.io/helm-charts
     version: 91.5.2
+    archiveSha256: 3e4149116054b2ca0f94f97cfcd703f3d5f780fd6cd94e9c732881826a3ce5cf
     namespace: monitoring
     values:
       local: platform/monitoring/values-local.yaml
       production: platform/monitoring/values-production.yaml
   - name: elastic-operator
+    management: argocd
     chart: eck-operator
     repository: https://helm.elastic.co
     version: 3.5.0
+    archiveSha256: eda9ec502c786fc1ad293e7f4235fdef43b2c741dcc977ab1f62377d72b5173f
     namespace: elastic-system
     values:
       local: platform/logging/operator-values.yaml
       production: platform/logging/operator-values.yaml
   - name: envoy-gateway
+    management: argocd
     chart: oci://docker.io/envoyproxy/gateway-helm
     argocdRepository: registry-1.docker.io/envoyproxy
     version: v1.9.1
+    archiveSha256: 68ce74961eeb5fc5e395628d6bbed9305a85b34619bd7ee17b01187f101bb8c5
     namespace: gateway-system
     values:
       local: platform/networking/envoy-values.yaml
       production: platform/networking/envoy-values.yaml
   - name: cert-manager
+    management: argocd
     chart: cert-manager
     repository: https://charts.jetstack.io
     version: v1.21.2
+    archiveSha256: 73a56e1728edd6c99f1f31082618c3259d279a76b7ebd3d4bdc5475c2442d34a
     namespace: cert-manager
     values:
       local: platform/security/cert-manager-values.yaml
       production: platform/security/cert-manager-values.yaml
   - name: gitlab
+    management: helm
     chart: gitlab
     repository: https://charts.gitlab.io
     version: 10.4.1
+    archiveSha256: a3f358e70adf5c0504502a90050a45813ff3401ab30bc03d5814fea5c1cacd9f
     namespace: gitlab
     values:
       production: platform/gitlab/values-production.yaml.example

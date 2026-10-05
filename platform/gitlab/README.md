@@ -4,6 +4,9 @@
 Webservice、Sidekiq、Shell、Toolbox 等应用服务运行在 Kubernetes；PostgreSQL、Redis、
 对象存储和 Gitaly 位于集群外。本配置与 `compose/gitlab/` 是两种部署选择，
 不能让两个活跃 GitLab 同时写同一数据库或仓库存储。现在只提供配置和离线渲染，未部署实例。
+GitLab 的安装和升级由 Helm 管理；GitOps 生成器不再为它创建 Application。
+这是为了保留 chart 区分首次安装与升级的 hook 行为，尤其依赖历史 chart-info 的升级检查。
+不要永久关闭 upgradeCheck 来绕过首次同步错误，也不要同时让 Helm 和 Argo CD 管理本实例。
 
 ## 依赖与实际配置
 
@@ -15,6 +18,9 @@ Webservice、Sidekiq、Shell、Toolbox 等应用服务运行在 Kubernetes；Pos
   由后端服务负责。此处一个 endpoint 并不保证该服务 HA。
 - Gitaly：外部 Linux package 部署，版本与 GitLab 对齐，存储名必须含 `default`。
   配置 TLS 8076、匹配的 Gitaly token / Shell secret，并允许回调 GitLab API。
+  每个外部 endpoint 使用 `tlsEnabled: true`，由 `gitlab-backend-ca` 提供 CA 信任。
+  保持 `global.gitaly.tls.enabled: false`：chart 10.4.1 的全局开关还会挂载内部
+  `gitlab-gitaly-tls` Secret，即使内部 Gitaly 已关闭。逐 endpoint 开关仍渲染 `tls://` 连接。
   HA 场景需进一步设计 Praefect、数据库和存储副本。
 - S3 兼容对象存储：TLS、最小权限身份、独立 bucket 和异地备份。先创建 values 中全部
   bucket，业务数据、备份和备份临时 bucket 不能混用。
@@ -35,6 +41,9 @@ Webservice、Sidekiq、Shell、Toolbox 等应用服务运行在 Kubernetes；Pos
 
 在 `gitlab` namespace 通过秘密管理系统提供下列内容，不把真实值提交到 Git。
 Secret 的 base64 不等于加密；应限制读取并开启集群静态加密。
+名称/key 的机器可读清单见 [required-secrets.yaml](required-secrets.yaml)，由 preflight 和
+渲染集成检查共用。可选 Registry 的额外依赖单独列出；chart hook 生成项不需要管理员预造，
+但必须核实安装时 hook 成功，并将生成的秘密纳入备份。
 
 | Secret | key / 内容 |
 |---|---|
@@ -92,7 +101,8 @@ DNS 指向入口，确认 Route 状态 `Accepted=True`、`ResolvedRefs=True` 以
 
 ## 可选 Registry 与 Runner
 
-基础 values 关闭 Registry、KAS、Pages 和内置 Runner。Runner 独立启用方法、受限
+基础 values 同时关闭 Registry Deployment 与 Rails Registry 集成，并关闭 KAS、Pages
+和内置 Runner；可选 overlay 同时打开 Registry 部署和 Rails 集成。Runner 独立启用方法、受限
 Kubernetes SA/RBAC 和注册步骤见 `../../docs/gitlab-production.md`，可连接这里的 GitLab
 HTTPS endpoint；不会默认启用 privileged 或 Docker socket。KAS/Pages 如需启用，另行供应
 域名、路由、TLS 以及相关存储后再进行集成验证。
@@ -117,20 +127,31 @@ Registry overlay 初始不启用可选 metadata database；需要在线 GC 等�
 外部数据库、角色、凭据及迁移/备份流程。对象 bucket 必须有独立备份，配置变化和上传数据要
 保持一致恢复点。验收镜像 login、push、pull 和恢复，不以 Pod Ready 作为完成条件。
 
+采用 Registry overlay 时，先在部署用 checkout 中填写真实配置，preflight 加
+`--gitlab-registry`，才会同时检查 Registry 域名、bucket 和 `gitlab-registry-storage/config`：
+
+```sh
+bash .agent/run.sh --toolbox --kubeconfig /srv/platform/admin.kubeconfig python scripts/preflight-production.py --component gitlab --gitlab-registry --context production
+```
+
+此检查读取 checkout 的 values，不能代替审查最后传给 Helm 的私有 values 文件。
+
 ## 渲染与安装
 
 仅离线渲染，不连接集群或验证 Secret、DNS、后端连接：
 
 ```sh
-bash .agent/run.sh helm template gitlab gitlab --repo https://charts.gitlab.io --version 10.4.1 --namespace gitlab --kube-version 1.35.0 -f platform/gitlab/values-production.yaml.example
-bash .agent/run.sh helm template gitlab gitlab --repo https://charts.gitlab.io --version 10.4.1 --namespace gitlab --kube-version 1.35.0 -f platform/gitlab/values-production.yaml.example -f platform/gitlab/values-registry.yaml.example
+bash .agent/run.sh --toolbox python scripts/verify.py
 ```
 
-依赖、Secret、Gateway、DNS、存储就绪后，将真实完整 values 放在私有
+该命令校验锁定的 chart 归档、默认 GitLab 配置，以及可选 Registry overlay 的实际渲染。
+它还核对 Pod、Job、CronJob 的必需 Secret 引用及外部 key 是否在供应清单中，并确认四处
+Rails Gitaly 地址仍使用 TLS；这不证明 Secret 实际存在、证书有效或 hook 已运行。
+依赖、Secret、Gateway、DNS、存储就绪后，将已审核的真实完整 values 放在私有
 `/srv/platform/gitlab-values.yaml`，按明确上下文安装；`gitlab` namespace 须由平台先创建：
 
 ```sh
-bash .agent/run.sh --kubeconfig /srv/platform/admin.kubeconfig --host-dir /srv/platform helm upgrade --install gitlab gitlab --repo https://charts.gitlab.io --version 10.4.1 --namespace gitlab --kube-context production -f /srv/platform/gitlab-values.yaml --timeout 30m --wait
+bash .agent/run.sh --kubeconfig /srv/platform/admin.kubeconfig --host-dir /srv/platform helm upgrade --install gitlab .cache/charts/gitlab-10.4.1/gitlab-10.4.1.tgz --namespace gitlab --kube-context production -f /srv/platform/gitlab-values.yaml --timeout 30m --wait
 ```
 
 安装会执行数据库迁移；失败先检查迁移/依赖，不能盲目 Helm rollback 后继续使用已迁移的库。

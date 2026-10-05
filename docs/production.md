@@ -29,7 +29,8 @@ Compose 独立部署见各组件目录；不要让两套 GitLab/数据库同时�
 
 按 [tooling.md](tooling.md) 构建工具箱，运行 Compose/YAML/Helm/Kustomize 校验。
 在配置仓库中修改 `platform/*/values-production*`、入口 hostnames、域名和存储类。
-`platform/releases.yaml` 是 chart/values 索引；不改变它的路径时，直接修改对应文件即可。
+`platform/releases.yaml` 是 chart/values、归档摘要和管理方式索引；不改变它的路径时，
+直接修改对应 values 即可。运行 `scripts/verify.py` 保留该次完整报告。
 
 ```sh
 bash .agent/run.sh --toolbox python scripts/preflight-production.py
@@ -61,15 +62,20 @@ Helm values 设置 `configs.secret.createSecret: false`，因此 Secret 由平�
 
 ```sh
 bash .agent/run.sh --kubeconfig /srv/platform/admin.kubeconfig --host-dir /srv/platform/secrets kubectl --context production -n argocd create secret generic argocd-secret --from-file=server.secretkey=/srv/platform/secrets/argocd-server-key --from-file=oidc.platform.clientSecret=/srv/platform/secrets/argocd-oidc-client-secret
-bash .agent/run.sh --kubeconfig /srv/platform/admin.kubeconfig helm upgrade --install argocd argo-cd --repo https://argoproj.github.io/argo-helm --version 10.9.2 --namespace argocd --kube-context production -f platform/argocd/values-production.yaml --wait --timeout 15m
+bash .agent/run.sh --kubeconfig /srv/platform/admin.kubeconfig kubectl --context production apply -f platform/networking/production/argocd-networkpolicy.yaml
+bash .agent/run.sh --kubeconfig /srv/platform/admin.kubeconfig helm upgrade --install argocd .cache/charts/argocd-10.9.2/argo-cd-10.9.2.tgz --namespace argocd --kube-context production -f platform/argocd/values-production.yaml --wait --timeout 15m
 ```
 
 不要同时应用 `bootstrap/argocd` 的原始清单，也不要让另一个 Application 管理同一 Argo CD。
-本方案让 Argo CD 自身由明确的 Helm release 管理，其余组件进入 GitOps；升级 Argo CD 同样审核
+安装命令使用前述完整校验核对过的本地 chart 归档。Argo CD 自身与 GitLab 由明确的 Helm
+release 管理，其余平台组件进入 GitOps；升级 Argo CD 同样审核
 版本/values 和回退路径。保留独立受控的 Kubernetes 管理通道，避免 IdP 故障锁死恢复操作。
 
 Argo CD server 在集群内使用 HTTP，外部 TLS 由 Gateway 终结。必须启用入口网络策略并验证
 CNI 执行；需要端到端 TLS 的环境应另配服务端证书与 BackendTLSPolicy，不能直接公开 HTTP。
+生产 values 关闭 chart 的 server 全放行 NetworkPolicy，保留 controller/repo-server 策略；
+上面在安装前应用的 server 策略只放行同 namespace/Gateway 的 8080 和监控的 8083。
+NetworkPolicy 是叠加放行关系，额外的宽松策略会破坏限制，升级时必须检查全部选中 server 的策略。
 
 ## 4. 接入 GitOps 与分阶段同步
 
@@ -91,9 +97,18 @@ bash .agent/run.sh --kubeconfig /srv/platform/admin.kubeconfig kubectl --context
 bash .agent/run.sh --kubeconfig /srv/platform/admin.kubeconfig kubectl --context production apply -f .local/gitops/infrastructure.yaml
 ```
 
+生成器产生 1 个 AppProject 与 6 个 Application，不包含 Helm 管理的 Argo CD/GitLab。
+GitLab chart 的升级检查需要历史安装信息；Argo CD 会在首次同步运行映射成 PreSync 的
+pre-upgrade hook，因此本仓库保留 GitLab 原生 Helm 安装/升级流程及升级保护，不做双重管理。
+参见 [Argo CD hook 语义](https://argo-cd.readthedocs.io/en/stable/user-guide/helm/#helm-hooks)。
+
 生成器不应用资源，不自动 sync/prune。`platform-infra` 可以管理 Argo CD namespace 和平台
 集群资源，视为管理员项目；业务仅使用 `argocd-app-settings/project-production.yaml.example`
 中的独立受限项目。跨目录不是安全边界，生产应拆分平台库与业务部署库。
+平台目的地包含 `kube-system`，供 cert-manager 选主 RBAC 和 monitoring 的 CoreDNS Service
+使用；业务项目仍仅允许 `apps-prod`。离线衔接检查会核对渲染对象的目的地与集群资源授权。
+若曾应用旧生成文件，重新 apply 不会删除旧的 GitLab Application；先检查其管理状态，
+完成无级联删除的所有权移交，再使用 Helm，不能直接覆盖现有部署。
 
 先同步 `cert-manager`、`envoy-gateway`；没有 UI 时，管理员可请求一次受控同步：
 
@@ -128,10 +143,10 @@ Prometheus/Alertmanager 不直接对公网发布。Argo CD CLI 经过该 HTTPRou
 
 | 顺序 | 前提与动作 | 验收 |
 | --- | --- | --- |
-| Monitoring | `grafana-admin`、`alertmanager-config`、CSI 就绪；手动同步 monitoring | targets、Grafana 登录、真实告警 firing/resolved、数据重挂 |
+| Monitoring | `grafana-admin`、`grafana-encryption`、`alertmanager-config`、CSI 就绪；手动同步 monitoring | targets、Grafana 登录、真实告警 firing/resolved、数据重挂 |
 | ECK Operator | 手动同步 elastic-operator；等待 CRD Established 与控制器 Ready | CRD/Webhook/Operator 健康 |
 | ELK 数据面 | 按 `platform/logging/README.md` 供应秘密、分阶段初始化索引与采集 | ES green、日志可检索、TLS、队列和恢复 |
-| GitLab | 按组件手册准备全部外部后端和 Secret；再同步 gitlab | 登录、HTTPS push、制品、SMTP、CI、备份恢复 |
+| GitLab | 按组件手册准备外部后端和 Secret；使用 Helm 安装/升级 | 登录、HTTPS push、制品、SMTP、CI、备份恢复 |
 | Registry/Runner | 审核可选 overlay 与独立 Runner 权限后启用 | 镜像 push/pull、流水线、隔离与凭据轮换 |
 
 同步前执行指定组件的只读 live preflight，例如：
@@ -140,7 +155,26 @@ Prometheus/Alertmanager 不直接对公网发布。Argo CD CLI 经过该 HTTPRou
 bash .agent/run.sh --toolbox --kubeconfig /srv/platform/admin.kubeconfig python scripts/preflight-production.py --context production --component monitoring
 ```
 
-这个脚本只检查占位符、节点数量、StorageClass 和必要 Secret key，不校验秘密内容、后端连通性、
-证书有效性、真实调度容量或备份质量。部署验收按组件手册完成，不能将 preflight 通过等同上线成功。
+脚本要求至少 3 个 Ready、无污点、未 cordon、无压力异常且 hostname 不同的 Linux worker，
+控制平面不计入。它采用保守基线，专用节点/容忍污点方案应先审核并调整检查规则。
+StorageClass 必须指定 CSI provisioner、使用 Retain，并具有匹配的 CSIDriver 和至少 3 个
+合格 worker 的 CSINode 注册。可加 `--expected-csi-driver ebs.csi.aws.com` 核对 AWS 示例的
+实际驱动；其他后端填写自己的驱动名称。
+
+live preflight 身份需要读取 nodes、storageclasses、csidrivers、csinodes 和所选组件的
+Secrets。脚本只检查 Secret key 存在，不输出内容；不校验秘密正确性、CSI 实际供卷、
+后端连通性、证书有效性、真实容量或备份质量。离线占位符扫描也包括所选组件的告警/入口
+与证书示例；采用其他 PKI 时同步替换这些环境输入。不能将 preflight 通过等同上线成功。
+
+## 7. 接入业务 GitOps
+
+`argocd-app-settings/production-demo.yaml.example` 与 `apps/production-demo` 提供配套的
+生产业务项目示例：两副本 Deployment、ClusterIP Service、PDB 和只读 ConfigMap 页面，
+容器以非 root 运行并禁用 ServiceAccount token 自动挂载。它用于验证业务交付路径。
+
+将示例复制到独立业务部署仓库，推送后同步替换 Project/Application 的仓库地址及审核后的
+完整 commit SHA。全零 SHA 只是明确无效的占位符，不能直接同步。先由管理员创建
+`apps-prod`、限额及必要网络规则，再授予业务项目同步权限；业务项目不允许改写这些边界。
+完整步骤与验证命令见 [业务设置](../argocd-app-settings/README.md)。
 
 升级、数据库迁移和恢复流程见 [operations.md](operations.md)。

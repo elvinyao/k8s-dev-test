@@ -60,7 +60,7 @@ def generate(output, kibana_host, ingest_host):
             required += [output / "tls" / service / name for name in ("server.key", "server.crt", "ca.crt")]
         required += [output / "tls" / "collector" / name for name in ("client.key", "client.crt", "ca.crt")]
         required.append(output / "tls" / "public" / "ca.crt")
-        if not all(path.is_file() and path.stat().st_size for path in required):
+        if not all(path.is_file() and path.stat().st_size for path in required) or not (output / "snapshots").is_dir():
             raise SystemExit("Existing initialization is missing files; refusing to regenerate credentials.")
         print("Existing certificates and secrets preserved; no keys or passwords replaced.")
         return

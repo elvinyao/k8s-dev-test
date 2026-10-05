@@ -1,6 +1,8 @@
 # GitLab Helm chart 10.4.1 / application 19.4.1; external durable backends.
 global:
   edition: ee
+  registry:
+    enabled: false
   hosts:
     domain: example.invalid
     https: true
@@ -55,7 +57,9 @@ global:
         port: 8076
         tlsEnabled: true
     tls:
-      enabled: true
+      # Only external endpoints use TLS; their trust comes from customCAs.
+      # Enabling this global switch also mounts the internal Gitaly TLS Secret.
+      enabled: false
     authToken:
       secret: gitlab-gitaly-token
       key: token

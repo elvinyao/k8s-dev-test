@@ -1,0 +1,39 @@
+# Copy to the business source repository's .gitlab-ci.yml, retaining ci/ below.
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"'
+    - when: never
+
+stages: [build, release]
+default:
+  tags: [platform-kubernetes]
+  timeout: 20m
+  interruptible: true
+
+variables:
+  BUILD_PLATFORM: linux/amd64
+
+build-image:
+  stage: build
+  image:
+    name: moby/buildkit:v0.33.1-rootless@sha256:f8a833b2de9d68e27f0815e4a737abdfaf8a2e4c615650557df11025101557b4
+    entrypoint: [""]
+  script:
+    - sh ci/build.sh
+  artifacts:
+    access: maintainer
+    expire_in: 7 days
+    paths: [build-metadata.json]
+
+release-proposal:
+  stage: release
+  image: python:3.13-bookworm@sha256:ab62bdaec8f090e565b8c76a8cac990229c28a42725f356cc32d9f4dea29806d
+  needs:
+    - job: build-image
+      artifacts: true
+  script:
+    - python ci/release.py build-metadata.json release
+  artifacts:
+    access: maintainer
+    expire_in: 30 days
+    paths: [release/]

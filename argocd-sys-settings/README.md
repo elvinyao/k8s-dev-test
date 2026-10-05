@@ -3,6 +3,8 @@
 生产平台入口已扩展到 `scripts/generate-gitops.py`：从 `platform/releases.yaml` 生成固定
 版本、多源 values 的 Application，另包含网络和 ELK 数据面入口。部署顺序与凭据要求见
 `docs/production.md`。生成文件默认放在被忽略的 `.local/gitops/`，不自动应用/同步。
+生成器遵循 releases 索引的 `management` 字段；Argo CD 与 GitLab 保持 Helm 管理，
+其余 4 个 chart 加网络/ELK 共 6 个 Application 由管理员分阶段同步。
 下面两个 `.yaml.example` 仍是用于理解 namespace 自举的最小示例，不能代替生产平台 Project。
 
 这里保存平台管理员负责的 Argo CD 模板，目前没有启用任何 Application。
@@ -23,8 +25,8 @@ Prometheus、ELK、GitLab；不要把该项目直接扩展为全资源通配授�
 4. 管理员先创建 AppProject，再创建 Application；查看 diff 后手动同步命名空间。
 5. 命名空间及存储准备完成后，再启用业务项目与应用。
 
-上述操作需要后续带 Kubernetes 工具及明确集群凭据的 Docker runner。
-当前初始化 runner 不提供集群连接，也不会执行上述操作。
+上述操作使用已有工具箱，并通过 runner 的 `--kubeconfig` 显式挂载集群配置。
+参见 [工具链](../docs/tooling.md)；默认不挂载宿主凭据。
 模板没有自动同步、自动 prune 或级联删除 finalizer；人工执行 prune 或删除
 Namespace 仍会销毁资源，必须独立审查。
 

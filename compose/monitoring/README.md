@@ -4,7 +4,33 @@
 
 默认仅监听宿主 `127.0.0.1`，仅采集这三个服务自身。**默认 Alertmanager 只在本地界面展示告警，不发送外部通知。** 正式值班使用前必须配置真实接收器，并验收告警触发、恢复和监控系统自身失联的通知。本目录没有默认挂载宿主 `/`、Docker socket、node-exporter 或 cAdvisor，也没有自动监控 Kubernetes 节点；节点指标需要按下面的接入说明增加。
 
-此配置是单机运行基线。Prometheus 本地 TSDB、Grafana SQLite 和单实例 Alertmanager 都依赖同一 Docker 主机；容器 healthy、自动重启及数据卷持久化不等于生产高可用。本轮交付不启动服务，也未完成真实负载、通知和恢复验收。
+此配置是单机运行基线。Prometheus 本地 TSDB、Grafana SQLite 和单实例 Alertmanager 都依赖同一 Docker 主机；容器 healthy、自动重启及数据卷持久化不等于生产高可用。已在临时 Compose 项目验证启动、自监控与空卷恢复；正式环境的负载、外部通知、TLS 和故障恢复仍需验收。
+
+## 可重复的启动与恢复验证
+
+从仓库根目录执行：
+
+```sh
+bash .agent/run.sh --docker --toolbox python scripts/smoke-monitoring.py
+```
+
+脚本复制本目录到被忽略的 `.local/monitoring-smoke-<随机ID>/`，生成独立凭据，使用原始
+配置、固定版本镜像和资源上限。测试副本关闭宿主端口发布及自动重启，将网络设为 internal，额外启动一个仅在
+内部网络运行的 Python HTTP 检查容器。不会读取原有 `.env`，不提供访问外部告警通道的网络路径。
+
+验证流程为 promtool/amtool 原生配置检查、三个服务健康、自监控采集和 Watchdog 到达
+Alertmanager、Grafana 登录权限/数据源/预置面板。随后写入自定义文件夹和 silence，停止
+服务并执行本文的 tar 备份，将归档恢复到另一随机项目的空卷，核对恢复前时间点的指标、
+自定义文件夹和 silence。
+
+成功或失败后均尝试清理脚本创建的两组容器、网络和数据卷；这是对独立测试资源的定向
+清理，不应把 `down --volumes` 用于正式项目。报告、日志、测试配置/秘密及备份归档留在
+权限受限的 `.local` 目录供复核，不提交 Git。若报告显示 cleanup 失败，按报告中的随机
+项目名核对残留资源。镜像缓存保留以供复测。
+
+该验证不测试外部通知投递、真实生产负载、TLS 代理或跨主机灾备；Grafana 测试数据包括
+自定义文件夹，不包含外部数据源秘密的解密验证。API 检查使用
+[Grafana Folder API](https://grafana.com/docs/grafana/latest/developer-resources/api-reference/http-api/folder/)。
 
 ## 固定版本与文件
 
